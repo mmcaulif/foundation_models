@@ -3,6 +3,11 @@ import jax.numpy as jnp
 import flax.linen as nn
 
 
+"""
+TODO:
+* Add default names and axis notation where possible!!!
+"""
+
 def attention(q, k, v, d, causal):
     q = jnp.transpose(q, (0, 2, 1, 3))
     k = jnp.transpose(k, (0, 2, 3, 1))
