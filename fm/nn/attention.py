@@ -21,26 +21,28 @@ def attention(q, k, v, d, causal):
 class MultiheadAttention(nn.Module):
     emb_dim: int
     n_heads: int
+    causal: bool = True
     @nn.compact
-    def __call__(self, x, causal: bool = True):
+    def __call__(self, x):
         qkv_dim = self.emb_dim // self.n_heads
         q = nn.DenseGeneral(features=(self.n_heads, qkv_dim))(x)
         k = nn.DenseGeneral(features=(self.n_heads, qkv_dim))(x)
         v = nn.DenseGeneral(features=(self.n_heads, qkv_dim))(x)
-        out = attention(q, k, v, qkv_dim, causal)
+        out = attention(q, k, v, qkv_dim, self.causal)
         return out.reshape(x.shape[:-1] + (self.emb_dim,))
     
 
 class MultiQueryAttention(nn.Module):
     emb_dim: int
     n_heads: int
+    causal: bool = True
     @nn.compact
-    def __call__(self, x, causal: bool = True):
+    def __call__(self, x,):
         qkv_dim = self.emb_dim // self.n_heads
         q = nn.DenseGeneral(features=(self.n_heads, qkv_dim))(x)
         k = nn.DenseGeneral(features=(1, qkv_dim))(x).repeat(self.n_heads, axis=-2)
         v = nn.DenseGeneral(features=(1, qkv_dim))(x).repeat(self.n_heads, axis=-2)
-        out = attention(q, k, v, qkv_dim, causal)
+        out = attention(q, k, v, qkv_dim, self.causal)
         return out.reshape(x.shape[:-1] + (self.emb_dim,))
 
 
@@ -48,11 +50,12 @@ class GroupedQueryAttention(nn.Module):
     emb_dim: int
     n_heads: int
     scale: int
+    causal: bool = True
     @nn.compact
-    def __call__(self, x, causal: bool = True):
+    def __call__(self, x):
         qkv_dim = self.emb_dim // self.n_heads
         q = nn.DenseGeneral(features=(self.n_heads, qkv_dim))(x)
         k = nn.DenseGeneral(features=(self.n_heads // self.scale, qkv_dim))(x).repeat(self.scale, axis=-2)
         v = nn.DenseGeneral(features=(self.n_heads // self.scale, qkv_dim))(x).repeat(self.scale, axis=-2)
-        out = attention(q, k, v, qkv_dim, causal)
+        out = attention(q, k, v, qkv_dim, self.causal)
         return out.reshape(x.shape[:-1] + (self.emb_dim,))
