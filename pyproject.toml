@@ -8,5 +8,6 @@ dependencies = [
     "flax>=0.11.1",
     "grain>=0.2.11",
     "jax>=0.7.0",
+    "matplotlib>=3.10.5",
     "optax>=0.2.5",
 ]
