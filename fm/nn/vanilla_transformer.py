@@ -15,30 +15,42 @@ appropriate, need to figure out how best to do this with Flax.linen:
 
 class MLP(nn.Module):
     emb_dim: int
-    hidden_scale: int = 2
+    dropout: float = 0.1
+    hidden_scale: int = 4
     @nn.compact
-    def __call__(self, x):
+    def __call__(self, x, training: bool = True):
         z = nn.Dense(self.emb_dim * self.hidden_scale)(x)
         z = nn.relu(z)
+        z = nn.Dropout(rate=self.dropout, deterministic=not training)(z)
         out = nn.Dense(self.emb_dim)(z)
         return out
 
 
-class Sublayer(nn.Module):
-    module: nn.Module
-    dropout: float = 0.1
+# class Sublayer(nn.Module):
+#     module: nn.Module
+#     dropout: float = 0.1
+#     @nn.compact
+#     def __call__(self, x, training: bool = True):
+#         z = nn.Dropout(
+#             rate=self.dropout,
+#             deterministic=not training
+#         )(self.module(x))
+#         z = nn.LayerNorm(
+#             use_bias=False,
+#             use_scale=False,
+#             use_fast_variance=False
+#         )(x + z)
+#         return z
+    
+
+class LN(nn.Module):
     @nn.compact
-    def __call__(self, x, training: bool = True):
-        z = nn.Dropout(
-            rate=self.dropout,
-            deterministic=not training
-        )(self.module(x))
-        z = nn.LayerNorm(
+    def __call__(self, x):
+        return nn.LayerNorm(
             use_bias=False,
             use_scale=False,
             use_fast_variance=False
-        )(x + z)
-        return z
+        )(x)
 
 
 class TransformerBlock(nn.Module):
@@ -48,30 +60,16 @@ class TransformerBlock(nn.Module):
     causal: bool = True
     @nn.compact
     def __call__(self, x, training: bool = True):
-        z = Sublayer(
-            module=MultiheadAttention(self.emb_dim, self.n_heads, self.causal),
-            dropout=self.dropout
-        )(x, training)
-        out = Sublayer(
-            module=MLP(self.emb_dim),
-            dropout=self.dropout
-        )(z)
+        z_att = MultiheadAttention(self.emb_dim, self.n_heads, self.causal)(x)
+        z_att = nn.Dropout(rate=self.dropout, deterministic=not training)(z_att)
+        z = LN()(x + z_att)
+        z_mlp = MLP(self.emb_dim, self.dropout)(z, training)
+        z_mlp = nn.Dropout(rate=self.dropout, deterministic=not training)(z_mlp)
+        out = LN()(z + z_mlp)
         return out
 
 
-class TransformerEmbed(nn.Module):
-    vocab_size: int
-    embed_dim: int
-    dropout: float = 0.1
-    @nn.compact
-    def __call__(self, x, training: bool = False):
-        z = nn.Embed(self.vocab_size, self.embed_dim)(x)
-        z = apply_sinusoidal_encoding(z, self.embed_dim)
-        out = nn.Dropout(rate=self.dropout, deterministic=not training)(z)
-        return out
-
-
-# TODO: make this more configurable so it can be used for Encoder and Decoders
+# TODO: make this more configurable so it can be used for Encoder and Decoders, e.g. optional Masking
 class Decoder(nn.Module):
     vocab_size: int
     embed_dim: int
@@ -80,7 +78,9 @@ class Decoder(nn.Module):
     dropout: float = 0.1
     @nn.compact
     def __call__(self, x, training: bool = True):
-        z = TransformerEmbed(self.vocab_size, self.embed_dim, self.dropout)(x, training)
+        z = nn.Embed(self.vocab_size, self.embed_dim)(x)
+        z = apply_sinusoidal_encoding(z, self.embed_dim)
+        z = nn.Dropout(rate=self.dropout, deterministic=not training)(z)
         for _ in range(self.n_blocks):
             z = TransformerBlock(self.embed_dim, self.n_heads)(z, training)
         logits = nn.Dense(self.vocab_size)(z)
